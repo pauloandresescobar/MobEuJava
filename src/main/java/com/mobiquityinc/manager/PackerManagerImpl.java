@@ -37,6 +37,12 @@ public class PackerManagerImpl implements PackerManager {
         return new BufferedReader(new FileReader(file));
     }
 
+    /**
+     *
+     * @param filePath to the file we will evaluate
+     * @return all the items that are going to be stored
+     * @throws APIException
+     */
     @Override
     public String processPackageFile(String filePath) throws APIException {
         String output = "";
@@ -127,7 +133,12 @@ public class PackerManagerImpl implements PackerManager {
         }
     }
 
-
+    /**
+     *
+     * @param id
+     * @param items
+     * @return true if the item is unique on the list
+     */
     private boolean isUniqueId(String id , List<ItemModel> items){
         long repeatedIds = items.stream().filter(item -> item.getId().contentEquals(id)).count();
         if( repeatedIds >1){
@@ -156,6 +167,12 @@ public class PackerManagerImpl implements PackerManager {
         return null;
     }
 
+    /**
+     *
+     * @param inputs is a list of strings to evaluate and extract the packages
+     * @return a list of all the packages to evaluate
+     * @throws APIException
+     */
     @Override
     public List<PackageModel> getItemsFromInput(List<String> inputs) throws APIException{
         try {
