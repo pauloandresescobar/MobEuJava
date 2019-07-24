@@ -56,46 +56,57 @@ public class PackerManagerImpl implements PackerManager {
      * packing separated by a coma.
      */
     @Override
-    public String getSelectedPackageItems(PackageModel packageModel) {
-        Double limitPackageWeigth = packageModel.getLimit();
-        String packages = null;
-        if(packageModel.getPackedItems().size() == 0){
-            return "-";
-        }
-        packageModel.getPackedItems().sort(Comparator.comparing(ItemModel::getPrice).reversed());
-        Integer higestPrice = packageModel.getPackedItems().get(0).getPrice();
-        for(int i = 0; i < packageModel.getPackedItems().size(); i++){
-            Integer price = packageModel.getPackedItems().get(i).getPrice();
-            Double weight = packageModel.getPackedItems().get(i).getWeight();
-            String id = packageModel.getPackedItems().get(i).getId();
-            if(higestPrice == price && weight <= limitPackageWeigth){
-                ItemModel itemModel = searchLowerWeigthWithSamePrice(packageModel.getPackedItems(), weight, price );
-                if(itemModel == null){
-                    if(packages!=null && !packages.contains(id)){
-                        packages=packages+","+id;
-                    } else {
-                        packages=id;
-                    }
-                    limitPackageWeigth = limitPackageWeigth-weight;
-                } else {
-                    if(packages ==null){
-                        packages = itemModel.getId();
-                        limitPackageWeigth = limitPackageWeigth- itemModel.getWeight();
-                    } else if(!packages.contains(itemModel.getId())){
-                        packages= itemModel.getId();
-                        limitPackageWeigth = limitPackageWeigth- itemModel.getWeight();
-                    } else {
-                        packages=packages+","+id;
-                        limitPackageWeigth = limitPackageWeigth-weight;
-                    }
-                }
-            } else if (packages != null && limitPackageWeigth-weight > 0 && !packages.contains(id)){
-                packages=packages+","+id;
-                limitPackageWeigth = limitPackageWeigth-weight;
-                higestPrice = price;
+    public String getSelectedPackageItems(PackageModel packageModel) throws APIException {
+        try {
+            Double limitPackageWeigth = packageModel.getLimit();
+            String packages = null;
+            if (packageModel.getPackedItems().size() == 0) {
+                return "-";
             }
+            packageModel.getPackedItems().sort(Comparator.comparing(ItemModel::getPrice).reversed());
+            Integer higestPrice = packageModel.getPackedItems().get(0).getPrice();
+            for (int i = 0; i < packageModel.getPackedItems().size(); i++) {
+                Integer price = packageModel.getPackedItems().get(i).getPrice();
+                Double weight = packageModel.getPackedItems().get(i).getWeight();
+                String id = packageModel.getPackedItems().get(i).getId();
+
+
+                if (!isUniqueId(id, packageModel.getPackedItems())) {
+                    throw new APIException(Constants.DUPLICATED_ID_MESSAGE);
+                }
+
+
+                if (higestPrice == price && weight <= limitPackageWeigth) {
+                    ItemModel itemModel = searchLowerWeigthWithSamePrice(packageModel.getPackedItems(), weight, price);
+                    if (itemModel == null) {
+                        if (packages != null && !packages.contains(id)) {
+                            packages = packages + "," + id;
+                        } else {
+                            packages = id;
+                        }
+                        limitPackageWeigth = limitPackageWeigth - weight;
+                    } else {
+                        if (packages == null) {
+                            packages = itemModel.getId();
+                            limitPackageWeigth = limitPackageWeigth - itemModel.getWeight();
+                        } else if (!packages.contains(itemModel.getId())) {
+                            packages = itemModel.getId();
+                            limitPackageWeigth = limitPackageWeigth - itemModel.getWeight();
+                        } else {
+                            packages = packages + "," + id;
+                            limitPackageWeigth = limitPackageWeigth - weight;
+                        }
+                    }
+                } else if (packages != null && limitPackageWeigth - weight > 0 && !packages.contains(id)) {
+                    packages = packages + "," + id;
+                    limitPackageWeigth = limitPackageWeigth - weight;
+                    higestPrice = price;
+                }
+            }
+            return packages;
+        } catch(Exception e) {
+            throw e;
         }
-        return packages;
     }
 
     /**
@@ -107,13 +118,23 @@ public class PackerManagerImpl implements PackerManager {
      */
     @Override
     public ItemModel searchLowerWeigthWithSamePrice(List<ItemModel> items, Double weight, Integer price){
-        List<ItemModel> itemEntities = items.stream().filter(item -> item.getWeight() < weight && item.getPrice()==price).collect(Collectors.toList());
-        if(!itemEntities.isEmpty()){
-            itemEntities.sort(Comparator.comparing(ItemModel::getWeight));
-            return itemEntities.get(0);
+        List<ItemModel> itemModel = items.stream().filter(item -> item.getWeight() < weight && item.getPrice()==price).collect(Collectors.toList());
+        if(!itemModel.isEmpty()){
+            itemModel.sort(Comparator.comparing(ItemModel::getWeight));
+            return itemModel.get(0);
         } else {
             return null;
         }
+    }
+
+
+    private boolean isUniqueId(String id , List<ItemModel> items){
+        long repeatedIds = items.stream().filter(item -> item.getId().contentEquals(id)).count();
+        if( repeatedIds >1){
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -143,55 +164,61 @@ public class PackerManagerImpl implements PackerManager {
             for (int i = 0; i < linesToRead; i++) {
                 PackageModel packageModel = new PackageModel();
                 String[] rawData = inputs.get(i).split(":");
-                String[] items = rawData[1].split("\\(");
-                Double packageLimit = Double.parseDouble(rawData[0].replaceAll(" ", ""));
-                List<ItemModel> thingsToSend = new ArrayList<>();
+                if (rawData.length >1){
+                    String[] items = rawData[1].split("\\(");
 
-                if (items.length -1 > Constants.MAX_ITEMS_AMOUNT ) {
-                    throw new APIException(Constants.PACKAGE_ITEMS_LIMIT_EXCEDED_MESSAGE);
-                }
+                    Double packageLimit = Double.parseDouble(rawData[0].replaceAll(" ", ""));
+                    List<ItemModel> thingsToSend = new ArrayList<>();
 
-                if (packageLimit > Constants.MAX_PACKAGE_WEIGHT) {
-                    throw new APIException(Constants.PACKAGE_LIMIT_WEIGHT_EXCEDED_MESSAGE);
-                }
-
-                if (packageLimit <= Constants.MAX_PACKAGE_WEIGHT ) {
-
-                    for (int j = 1; j < items.length; j++) {
-
-                        String[] thingDetails = items[j].split(",");
-                        double weight = Double.parseDouble(thingDetails[1]);
-
-                        if(weight>Constants.MAX_ITEM_WEIGHT){
-                            throw new APIException(Constants.PACKAGE_ITEM_WEIGHT_LIMIT_EXCEDED_MESSAGE);
-                        }
-
-                        String priceText = thingDetails[2].replaceAll("\\D+", "");
-                        Integer price = Integer.parseInt(priceText);
-
-                        if(price>Constants.MAX_ITEM_COST){
-                            throw new APIException(Constants.PACKAGE_ITEM_PRICE_EXCEDED_MESSAGE);
-                        }
-
-                        String index = thingDetails[0];
-                        if (weight < packageLimit) {
-                            ItemModel thing = new ItemModel(index, weight, price);
-                            thingsToSend.add(thing);
-                        }
+                    if (items.length -1 > Constants.MAX_ITEMS_AMOUNT ) {
+                        throw new APIException(Constants.PACKAGE_ITEMS_LIMIT_EXCEDED_MESSAGE);
                     }
-                    packageModel.setPackedItems(thingsToSend);
-                    packageModel.setLimit(packageLimit);
-                    packages.add(packageModel);
 
+                    if (packageLimit > Constants.MAX_PACKAGE_WEIGHT) {
+                        throw new APIException(Constants.PACKAGE_LIMIT_WEIGHT_EXCEDED_MESSAGE);
+                    }
+
+                    if (packageLimit <= Constants.MAX_PACKAGE_WEIGHT ) {
+
+                        for (int j = 1; j < items.length; j++) {
+
+                            String[] thingDetails = items[j].split(",");
+                            String index = thingDetails[0];
+                            double weight = Double.parseDouble(thingDetails[1]);
+
+                            if(weight>Constants.MAX_ITEM_WEIGHT){
+                                throw new APIException(Constants.PACKAGE_ITEM_WEIGHT_LIMIT_EXCEDED_MESSAGE);
+                            }
+
+                            String priceText = thingDetails[2].replaceAll("\\D+", "");
+                            Integer price = Integer.parseInt(priceText);
+
+                            if(price>Constants.MAX_ITEM_COST){
+                                throw new APIException(Constants.PACKAGE_ITEM_PRICE_EXCEDED_MESSAGE);
+                            }
+
+                            if (weight < packageLimit) {
+                                ItemModel thing = new ItemModel(index, weight, price);
+                                thingsToSend.add(thing);
+                            }
+                        }
+                        packageModel.setPackedItems(thingsToSend);
+                        packageModel.setLimit(packageLimit);
+                        packages.add(packageModel);
+
+                    }
                 }
             }
+
             return packages;
 
         } catch (APIException e) {
             throw e;
 
+        } catch(NumberFormatException e){
+            throw new APIException(Constants.NUMBER_EXCEPTION_MESSAGE);
         } catch (Exception e) {
-            LOGGER.severe(e.getMessage());
+            LOGGER.info(e.getMessage());
         }
 
         return null;

@@ -9,7 +9,7 @@ import java.io.FileNotFoundException;
 import java.util.List;
 
 public interface PackerManager {
-     String getSelectedPackageItems(PackageModel packageModel);
+     String getSelectedPackageItems(PackageModel packageModel) throws APIException;
      List<PackageModel> getAllValidPackages(String filePath) throws APIException;
      BufferedReader loadFile(String filePath) throws FileNotFoundException;
      String processPackageFile(String filePAth) throws APIException;
